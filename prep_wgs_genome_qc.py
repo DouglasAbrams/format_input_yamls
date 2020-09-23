@@ -28,6 +28,8 @@ result_path = {
    "WGS-REMIXT" : "results/remixt",
 }
 
+wgs_cmd = " bsub -e E3 -n 72 -sla jcSC -q gpuqueue -gpu \"num=1\" -R \"rusage[mem=5]span[ptile=72]select[type==CentOS7]\" bash -c \" wgs postprocessing --input_yaml  {} --out_dir {} --tmpdir  {} --loglevel DEBUG --submit local --refdir /juno/work/shah/users/grewald/SPECTRUM_v014/WGS_REFERENCE --qc_metadata metadata_0.yaml \""
+
 
 def make_category_label(sample_group):
     return "normal_group:----{}----tumour_group:----{}".format(*sample_group)
@@ -116,7 +118,7 @@ parser.add_argument('--normal_sample_types', nargs='+', type=str)
 parser.add_argument('--tumour_sample_types', nargs='+', type=str)
 parser.add_argument('--output_dirname', help='foo help')
 parser.add_argument('--sample_level_yamls', help='foo help')
-
+parser.add_argument('--cmds_filename', help='foo help')
 
 args = parser.parse_args()
 
@@ -125,6 +127,7 @@ tumour_labels = args.tumour_sample_types
 project = args.project_name
 output_dir = args.output_dirname
 sample_level_yamls = bool(args.sample_level_yamls)
+cmds_file =  args.cmds_filename
 
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
@@ -141,6 +144,7 @@ isabl_data["full_base_path"] = isabl_data.apply(lambda r: get_fuller_path(r), ax
 
 print("\nproducing {} input yamls: input type categories: {}\n".format(len(input_categories), input_categories))
 
+yaml_paths = {}
 
 for data_group, category in zip(get_data_in_groups(input_categories, isabl_data), input_categories):
 
@@ -159,6 +163,16 @@ for data_group, category in zip(get_data_in_groups(input_categories, isabl_data)
                 output_name =category_label + ".yaml"
                 write_dir = output_dir
             
-            with open(os.path.join(write_dir, output_name), 'w') as outfile:
+            yaml_file = os.path.join(write_dir, output_name)
+
+            with open(yaml_file, 'w') as outfile:
                 yaml.dump({output_group: prepped_sample_output}, outfile, default_flow_style=False)
         
+            yaml_paths[output_group] = yaml_file
+
+with open(cmds_file, 'w') as f:
+    for label, input_yaml, in yaml_paths.items():
+        results_dir = "results_" + label
+        tmp_dir =  "temp" + label
+        wgscmd =  wgs_cmd.format(input_yaml, results_dir, tmp_dir)
+        f.writelines(wgscmd + "\n")
